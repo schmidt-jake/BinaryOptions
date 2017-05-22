@@ -4,6 +4,7 @@ from ticktock import tick, tock
 import quandl
 from pandas.tseries.offsets import BDay
 
+QUANDL_API_KEY = 'ZCLSs1s9ojeHEFssKL6S'
 
 def macdSig(macd):
 	return np.subtract(macd[0], macd[1])
@@ -16,7 +17,6 @@ def toPercent(ts):
 
 def getData(panel):
 	tick()
-	QUANDL_API_KEY = 'ZCLSs1s9ojeHEFssKL6S'
 	qdata = quandl.get(
 		['AAII/AAII_SENTIMENT.1',
 		 'AAII/AAII_SENTIMENT.3',
@@ -30,8 +30,12 @@ def getData(panel):
 	
 	tock('pre-format')
 	
-	'''Runtime for full backtest from 2002: ~27 min.
-	Can't think of a better way than to use nested loops
+	'''Runtime for full backtest: ~27 min.
+	I've tried various tactics with pandas to preserve the vector form of the data:
+	- pd.rolling
+	- pd.shift
+	- pd.applymap
+	But these cannot handle variable period sizes. Can't think of a better way than nested loops.
 	'''
 	hours = range(8, 14 + 1)
 	days = range(1, 10 + 1)
@@ -51,25 +55,16 @@ def getData(panel):
 				tp = len(prdP)
 				dic = {
 					'p_fwd': panel.loc['price', i + dt.timedelta(hours=2), :],
-					'p_fwd_std_15min': panel.loc['price', (panel.major_axis >= i + dt.timedelta(hours=1, minutes=45)) & (
-						panel.major_axis <= i + dt.timedelta(hours=2)), :].std(),
+					'p_fwd_std_15min': panel.loc['price', (panel.major_axis >= i + dt.timedelta(hours=1, minutes=45)) & (panel.major_axis <= i + dt.timedelta(hours=2)), :].std(),
 					'p_cur': prdP.iloc[-1],
 					'p_prd': prdP.iloc[0],
-					'p_ema': [EMA(prdP[j].values, timeperiod=tp - 1)[-1] if not prdP[j].isnull().all() else np.NaN for j in
-					          prdP.columns],
-					'p_ema2': [EMA(prdP[j].values, timeperiod=tp / 2)[-1] if not prdP[j].isnull().all() else np.NaN for j in
-					           prdP.columns],
-					'v_ema': [EMA(prdV[j].values, timeperiod=tp - 1)[-1] if not prdV[j].isnull().all() else np.NaN for j in
-					          prdV.columns],
-					'v_ema2': [EMA(prdV[j].values, timeperiod=tp / 2)[-1] if not prdV[j].isnull().all() else np.NaN for j in
-					           prdV.columns],
-					'rsi': [RSI(prdP[j].values, timeperiod=tp - 1)[-1] if not prdP[j].isnull().all() else np.NaN for j in
-					        prdP.columns],
-					'obv': [toPercent(OBV(prdP[j].values, prdV[j].values)) if not (prdP[j].isnull().all()) | (
-						prdV[j].isnull().all()) else np.NaN for j in prdP.columns],
-					'macd': [
-						macdSig(MACD(prdP[j].values, slowperiod=tp / 2, fastperiod=tp / 3, signalperiod=tp / 5))[-1] if not prdP[
-							j].isnull().all() else np.NaN for j in prdP.columns],
+					'p_ema': [EMA(prdP[j].values, timeperiod=tp - 1)[-1] if not prdP[j].isnull().all() else np.NaN for j in prdP.columns],
+					'p_ema2': [EMA(prdP[j].values, timeperiod=tp / 2)[-1] if not prdP[j].isnull().all() else np.NaN for j in prdP.columns],
+					'v_ema': [EMA(prdV[j].values, timeperiod=tp - 1)[-1] if not prdV[j].isnull().all() else np.NaN for j in prdV.columns],
+					'v_ema2': [EMA(prdV[j].values, timeperiod=tp / 2)[-1] if not prdV[j].isnull().all() else np.NaN for j in prdV.columns],
+					'rsi': [RSI(prdP[j].values, timeperiod=tp - 1)[-1] if not prdP[j].isnull().all() else np.NaN for j in prdP.columns],
+					'obv': [toPercent(OBV(prdP[j].values, prdV[j].values)) if not (prdP[j].isnull().all()) | (prdV[j].isnull().all()) else np.NaN for j in prdP.columns],
+					'macd': [macdSig(MACD(prdP[j].values, slowperiod=tp / 2, fastperiod=tp / 3, signalperiod=tp / 5))[-1] if not prdP[j].isnull().all() else np.NaN for j in prdP.columns],
 					'bull': qdata.loc[i, 'bull'],
 					'bear': qdata.loc[i, 'bear'],
 					'tr': qdata.loc[i, 'tr'],
